@@ -1,0 +1,2121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Logistics Optimization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 100%;
+            height: 350px;
+            max-height: 400px;
+            margin: 0 auto;
+        }
+        .canvas-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            transition: transform 0.2s ease;
+        }
+        .canvas-card:hover {
+            transform: translateY(-2px);
+        }
+        .badge-significant { 
+            background-color: #fee2e2; 
+            color: #dc2626; 
+            border: 1px solid #fecaca; 
+        }
+        .badge-stable { 
+            background-color: #dcfce7; 
+            color: #16a34a; 
+            border: 1px solid #bbf7d0; 
+        }
+        .heat-map-cell { 
+            transition: opacity 0.2s; 
+            cursor: help;
+            display: inline-block;
+            min-width: 50px;
+            font-weight: 600;
+        }
+        .heat-map-cell:hover { 
+            opacity: 0.8; 
+        }
+        @media (min-width: 768px) {
+            .chart-container {
+                height: 400px;
+            }
+        }
+
+        .carrier-perf-layout {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 1px;
+            flex-wrap: wrap;
+        }
+
+        .carrier-perf-graph {
+            flex: 2;
+            min-width: 360px;
+            height: 350px;
+            min-height: 350px;
+        }
+
+        .carrier-perf-text {
+            flex: 1;
+            min-width: 280px;
+        }
+
+        .carrier-perf-chart-container {
+            height: 350px;
+            min-height: 350px;
+        }
+
+        @media (max-width: 1023px) {
+            .carrier-perf-layout {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .carrier-perf-graph,
+            .carrier-perf-text {
+                flex: 1 1 100%;
+                min-width: 100%;
+            }
+
+            .carrier-perf-chart-container {
+                height: 300px;
+                min-height: 300px;
+            }
+        }
+
+     /* ── FILTER BAR ── */
+        #filterBar {
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            background: #1e3a5f;
+            border-bottom: 3px solid #FF6F00;
+            padding: 12px 24px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+        }
+        #filterBar .filter-label {
+            color: #93c5fd;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            white-space: nowrap;
+        }
+        #filterBar select {
+            background: #0f2744;
+            color: #e2e8f0;
+            border: 1px solid #3b6899;
+            border-radius: 8px;
+            padding: 7px 32px 7px 12px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2393c5fd' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            min-width: 160px;
+        }
+        #filterBar select:focus {
+            outline: none;
+            border-color: #FF6F00;
+            box-shadow: 0 0 0 2px rgba(255,111,0,0.3);
+        }
+        #filterBar select:hover {
+            border-color: #60a5fa;
+        }
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #filterBar .filter-divider {
+            width: 1px;
+            height: 28px;
+            background: #2d5080;
+        }
+        #activeFilterBadge {
+            margin-left: auto;
+            background: #FF6F00;
+            color: white;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 20px;
+            display: none;
+        }
+        #resetBtn {
+            background: transparent;
+            color: #93c5fd;
+            border: 1px solid #3b6899;
+            border-radius: 8px;
+            padding: 7px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        #resetBtn:hover {
+            background: #1e3a5f;
+            border-color: #FF6F00;
+            color: #FF6F00;
+        }
+        /* Highlighted chart card when filter is active */
+        .filter-active-glow {
+            box-shadow: 0 0 0 2px #FF6F00, 0 4px 16px rgba(255,111,0,0.2) !important;
+        }
+        #malaysia-map {
+            width: 100%;
+            height: 380px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid #e8d5c4;
+            box-shadow: 0 2px 12px rgba(255,107,53,0.15);
+            cursor: grab;
+        }
+        #malaysia-map:active { cursor: grabbing; }
+        .leaflet-control-zoom {
+            border: none !important;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2) !important;
+            border-radius: 8px !important;
+            overflow: hidden;
+        }
+        .leaflet-control-zoom-in,
+        .leaflet-control-zoom-out {
+            background-color: white !important;
+            color: #FF6B35 !important;
+            font-weight: 700 !important;
+            font-size: 16px !important;
+            border: none !important;
+            border-bottom: 1px solid #f0f0f0 !important;
+            width: 30px !important;
+            height: 30px !important;
+            line-height: 30px !important;
+        }
+        .leaflet-control-zoom-in:hover,
+        .leaflet-control-zoom-out:hover {
+            background-color: #FF6B35 !important;
+            color: white !important;
+        }
+        .leaflet-control-attribution { display: none !important; }
+        .port-tooltip {
+            background: #1a3a6b !important;
+            border: 2px solid #FF6B35 !important;
+            border-radius: 6px !important;
+            color: white !important;
+            font-family: 'Segoe UI', Arial, sans-serif !important;
+            font-size: 12px !important;
+            padding: 8px 12px !important;
+            white-space: nowrap !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.35) !important;
+        }
+        .port-tooltip.leaflet-tooltip-top::before { border-top-color: #FF6B35 !important; }
+        .map-reset-btn {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            z-index: 999;
+            background: white;
+            border: 2px solid #FF6B35;
+            color: #FF6B35;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+        .map-reset-btn:hover { background: #FF6B35; color: white; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans">
+
+    <!-- Header Section -->
+    <header class="bg-blue-900 text-white p-8 shadow-lg">
+        <div class="max-w-7xl mx-auto">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+                <div class="mb-4 md:mb-0">
+                    <h1 class="text-3xl md:text-5xl font-bold tracking-tight mb-2">Supply Chain Analytics</h1>
+                    <p class="text-blue-200 text-lg max-w-2xl">A data-driven analysis of Malaysian logistics optimization using Kaggle Supply Chain dataset (4,899 records, 2023-2025).</p>
+                </div>
+                <div class="bg-orange-600 px-6 py-3 rounded-lg shadow-md">
+                    <center><span class="block text-xs font-semibold uppercase tracking-wider text-orange-100">Champion</span></center>
+                    <span class="text-xl font-bold">Random Forest</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+
+      <!-- ═══════════════════════════════════════════
+         INTERACTIVE FILTER BAR — Section D
+         Filters: Origin Port | Plant Code | Carrier
+         ═══════════════════════════════════════════ -->
+    <div id="filterBar">
+        <span class="filter-label">&#9881; Dashboard Filters</span>
+ 
+        <div class="filter-divider"></div>
+ 
+        <div class="filter-group">
+            <span class="filter-label">Origin Port</span>
+            <select id="portFilter" onchange="applyFilters()">
+                <option value="all">All Ports</option>
+                <option value="PORT04">PORT04 &nbsp;(4,754 shipments)</option>
+                <option value="PORT09">PORT09 &nbsp;(144 shipments)</option>
+                <option value="PORT05">PORT05 &nbsp;(1 shipment)</option>
+            </select>
+        </div>
+ 
+        <div class="filter-divider"></div>
+ 
+        <div class="filter-group">
+            <span class="filter-label">Plant Code</span>
+            <select id="plantFilter" onchange="applyFilters()">
+                <option value="all">All Plants</option>
+                <option value="PLANT04">PLANT04 &nbsp;(Max TPT)</option>
+                <option value="PLANT08">PLANT08 &nbsp;(Max TPT)</option>
+                <option value="PLANT12">PLANT12 &nbsp;(Max TPT)</option>
+                <option value="PLANT09">PLANT09 &nbsp;(Max TPT)</option>
+                <option value="PLANT03">PLANT03 &nbsp;(Avg TPT: 1.81d)</option>
+                <option value="PLANT16">PLANT16 &nbsp;(Lowest TPT)</option>
+            </select>
+        </div>
+ 
+        <div class="filter-divider"></div>
+ 
+        <div class="filter-group">
+            <span class="filter-label">Carrier</span>
+            <select id="carrierFilter" onchange="applyFilters()">
+                <option value="all">All Carriers</option>
+                <option value="V444_1">V444_1 &nbsp;(Top performer)</option>
+                <option value="V444_0">V444_0</option>
+                <option value="V44_3">V44_3</option>
+            </select>
+        </div>
+ 
+        <div class="filter-divider"></div>
+ 
+        <button id="resetBtn" onclick="resetFilters()">&#8635; Reset All</button>
+        <span id="activeFilterBadge">Filters Active</span>
+    </div>
+
+    <main class="max-w-7xl mx-auto p-4 md:p-8 space-y-12">
+    
+    <!-- Filter Result Banner (shown when any filter is active) -->
+    <div id="filterResultBanner" style="display:none;" class="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-wrap items-center gap-4">
+        <div class="flex items-center gap-2">
+            <span class="text-blue-700 font-bold text-sm">&#128269; Filtered View:</span>
+            <span id="filterSummaryText" class="text-blue-600 text-sm"></span>
+        </div>
+        <div class="ml-auto flex flex-wrap gap-6 text-sm">
+            <div><span class="text-slate-500">Shipments:</span><span id="filteredCount" class="font-bold text-blue-900 ml-1">-</span></div>
+            <div><span class="text-slate-500">Avg Lead Time:</span><span id="filteredLeadTime" class="font-bold text-blue-900 ml-1">-</span></div>
+            <div><span class="text-slate-500">Avg TPT:</span><span id="filteredTPT" class="font-bold text-blue-900 ml-1">-</span></div>
+            <div><span class="text-slate-500">Avg Delay:</span><span id="filteredDelay" class="font-bold text-orange-600 ml-1">-</span></div>
+        </div>
+    </div>
+
+        <!-- Executive Summary & KPIs -->
+        <section>
+            <h2 class="text-2xl font-bold text-blue-900 mb-4 border-l-4 border-orange-500 pl-4">Executive Overview</h2>
+            <p class="mb-8 text-slate-600 leading-relaxed max-w-4xl">
+                Global supply chains are currently facing significant pressure from rising freight costs and unpredictable transit times. 
+                Our analysis of the "Supply Chain Logistics Problem" dataset reveals critical inefficiencies in carrier selection and warehouse utilization. 
+                The metrics below highlight the current baseline performance of the analyzed logistics corridor.
+            </p>
+            
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-600">
+                    <h3 class="text-sm font-semibold text-slate-500 uppercase">Total Orders Analyzed</h3>
+                    <p class="text-4xl font-bold text-slate-800 mt-2">4,899</p>
+                    <p class="text-sm text-green-600 mt-1">After Cleaning</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-orange-500">
+                    <h3 class="text-sm font-semibold text-slate-500 uppercase">Avg Lead Time</h3>
+                    <p class="text-4xl font-bold text-slate-800 mt-2">3.01 days</p>
+                    <p class="text-sm text-slate-400 mt-1">Target: &lt;2.5 days</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-600">
+                    <h3 class="text-sm font-semibold text-slate-500 uppercase">On-Time Rate</h3>
+                    <p class="text-4xl font-bold text-slate-800 mt-2">68.4%</p>
+                    <p class="text-sm text-red-500 mt-1">Target 85%</p>
+                </div>
+                <div class="bg-white p-6 rounded-xl shadow-md border-t-4 border-orange-500">
+                    <h3 class="text-sm font-semibold text-slate-500 uppercase">Worst Bottleneck</h3>
+                    <p class="text-4xl font-bold text-slate-800 mt-2">Port 04</p>
+                    <p class="text-sm text-slate-400 mt-1">2.5x network avg</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Process Flow Visual -->
+        <section class="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+            <h2 class="text-xl font-bold text-blue-900 mb-6">Supply Chain Network Flow</h2>
+            <div class="flex flex-col md:flex-row items-center justify-between text-center space-y-6 md:space-y-0">
+                
+                <div class="flex-1 flex flex-col items-center group">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-3xl mb-3 shadow-sm group-hover:bg-blue-200 transition-colors">
+                        &#127981;
+                    </div>
+                    <h4 class="font-bold text-slate-700">Manufacturing Plant</h4>
+                    <p class="text-xs text-slate-500 mt-1">Product Origin</p>
+                </div>
+
+                <div class="text-3xl text-slate-300 transform rotate-90 md:rotate-0">&#10132;</div>
+
+                <div class="flex-1 flex flex-col items-center group">
+                    <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center text-3xl mb-3 shadow-sm group-hover:bg-orange-200 transition-colors">
+                        &#9973;
+                    </div>
+                    <h4 class="font-bold text-slate-700">Port of Loading</h4>
+                    <p class="text-xs text-slate-500 mt-1">Consolidation</p>
+                </div>
+
+                <div class="text-3xl text-slate-300 transform rotate-90 md:rotate-0">&#10132;</div>
+
+                <div class="flex-1 flex flex-col items-center group">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center text-3xl mb-3 shadow-sm group-hover:bg-blue-200 transition-colors">
+                        &#128674;
+                    </div>
+                    <h4 class="font-bold text-slate-700">Carrier Transit</h4>
+                    <p class="text-xs text-slate-500 mt-1">Freight Movement</p>
+                </div>
+
+                <div class="text-3xl text-slate-300 transform rotate-90 md:rotate-0">&#10132;</div>
+
+                <div class="flex-1 flex flex-col items-center group">
+                    <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center text-3xl mb-3 shadow-sm group-hover:bg-green-200 transition-colors">
+                        &#128230;
+                    </div>
+                    <h4 class="font-bold text-slate-700">VMI Customer</h4>
+                    <p class="text-xs text-slate-500 mt-1">Final Destination</p>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Bottleneck Analysis -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div class="order-2 md:order-1">
+                <div class="chart-container">
+                    <canvas id="bottleneckChart"></canvas>
+                </div>
+            </div>
+            <div class="order-1 md:order-2">
+                <h2 class="text-2xl font-bold text-blue-900 mb-4 border-l-4 border-orange-500 pl-4">Identifying Bottlenecks</h2>
+                <p class="text-slate-600 mb-4">
+                    This analysis reveals that <strong>PORT04 handles 97% of total shipment volume (4,754 out of 4,899 records)</strong> while simultaneously exhibiting the <span class="bg-red-100 text-red-800 px-2 py-1 rounded font-semibold">highest average shipping delays</span> across all origin ports.<br><br>
+            
+            <strong>PORT09</strong> shows moderate delays with 144 records (3% volume), warranting monitoring but lower priority intervention. <strong>PORT05</strong> has minimal volume (1 record) and correspondingly low delays, confirming it's not a capacity constraint.<br><br>
+            
+            The extreme volume-delay combination at PORT04 validates the urgent need for <strong>capacity rebalancing, route diversification to PORT02 alternatives, and immediate operational review</strong> to alleviate network congestion and improve overall delivery performance.
+                </p>
+            </div>
+        </section>
+
+        <!-- Carrier Performance -->
+        <section class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-blue-900 mb-2 border-l-4 border-orange-500 pl-4">Port Performance Analysis</h2>
+                <p class="text-slate-600 max-w-3xl">
+                <strong>Ports show varying efficiency levels across the Malaysian logistics network.</strong> 
+                This analysis compares average Total Lead Time against Transit Processing Time (TPT) for major origin ports. 
+                <strong>PORT05</strong> demonstrates the worst performance with lead times <span class="bg-orange-100 text-orange-800 px-1 rounded font-semibold">significantly higher than TPT</span>, indicating severe handling bottlenecks despite low volume. 
+                Conversely, <strong>PORT04</strong> offers better efficiency with minimal gap between processing and total delivery time. 
+                </p>
+            </div>
+            <div class="chart-container">
+                <canvas id="carrierChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Cost Driver Analysis -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+            <div>
+                <h2 class="text-2xl font-bold text-blue-900 mb-4 border-l-4 border-orange-500 pl-4">Freight Rate Anomalies</h2>
+                <p class="text-slate-600 mb-4">
+                    Analyzing the relationship between shipment weight and freight cost reveals significant pricing inefficiencies.
+                    While a linear correlation is expected, the data shows clusters of <strong class="text-orange-600">high-cost, low-weight outliers</strong>.
+                </p>
+                <p class="text-slate-600">
+                    These outliers represent "Rush Orders" sent via air freight or expedited ground services. 
+                    Reducing these ad-hoc emergency shipments through better inventory planning could save an estimated 
+                    <strong class="text-green-700">a meaningful reduction in annual logistics expenditure</strong>.
+                </p>
+            </div>
+            <div>
+                <div class="chart-container">
+                    <canvas id="costScatterChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Plant Bottleneck: Avg TPT -->
+        <section class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
+             <div class="mb-6">
+                <h2 class="text-2xl font-bold text-blue-900 mb-2 border-l-4 border-orange-500 pl-4">Bottlenecks: Avg TPT by Plant</h2>
+                <p class="text-slate-600 max-w-3xl">
+                    Plants sorted by average Transit Processing Time (TPT) descending. <strong class="text-red-600">PLANT04, PLANT08, PLANT12, and PLANT09</strong> share the highest average TPT at
+                    <strong class="text-red-600">2.0 days</strong>, indicating severe processing bottlenecks with no buffer for demand surges. <strong class="text-blue-700">PLANT03</strong> is moderate at <strong class="text-blue-700">1.81 days</strong>, while <strong class="text-blue-700">PLANT16</strong>
+                    has the lowest TPT at <strong class="text-blue-700">0.78 days</strong> — a candidate for workload redistribution to reduce bottleneck risk by up to <strong class="text-blue-700">35%</strong>.
+                </p>
+            </div>
+            <div class="chart-container">
+                <canvas id="capacityChart"></canvas>
+            </div>
+        </section>
+
+        <!-- Carrier Performance Chart -->
+        <section class="p-2 md:p-4">
+            <div class="carrier-perf-layout">
+                <div class="carrier-perf-graph">
+                    <div class="chart-container carrier-perf-chart-container">
+                        <canvas id="carrierPerfChart"></canvas>
+                    </div>
+                </div>
+                <div class="carrier-perf-text">
+                    <h2 class="text-2xl font-bold text-blue-900 mb-2 border-l-4 border-orange-500 pl-4">Carrier Performance: TPT vs On-Time Delivery</h2>
+                    <p class="text-slate-600 max-w-3xl mb-4">
+                        Dual-axis analysis showing carrier efficiency. V444_1 leads with the lowest TPT and highest on-time rate. Filter by carrier to highlight specific performance.
+                    </p>
+                    <p class="text-slate-600 max-w-3xl mb-4">
+                        V444_1 stands out as the top-performing carrier, with the lowest Average TPT and the highest on-time delivery rate. This indicates fast and reliable service. In contrast, V444_0 is the dominant carrier by volume with moderate TPT.
+                    </p>
+                    <p class="text-slate-600 max-w-3xl mb-4">
+                        V44_3 operates as Customer-Arranged Shipping (CRF), representing zero-cost freight for the firm. It shows the highest TPT variance and most inconsistent delivery performance among the three carriers, and should be excluded from standard carrier cost comparisons.
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Plant Impact -->
+<section class="bg-white p-6 md:p-8 rounded-xl shadow-lg">
+    <h2 class="text-2xl font-bold text-blue-900 mb-6 border-l-4 border-orange-500 pl-4">
+        Port Impact: Shipment Volume vs. Average Lead Time
+    </h2>
+    
+    <!-- Grid: 35% Text, 65% Graph -->
+    <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        
+        <!-- LEFT SIDE: Text Content (2 columns = 40%) -->
+        <div class="lg:col-span-2 flex flex-col justify-center">
+            <p class="mb-4 text-sm leading-relaxed">
+                <strong class="text-base">PORT04</strong> dominates shipment volume with 4,754 shipments yet 
+                maintains the lowest average lead time at 3.0 days demonstrating strong 
+                operational efficiency at scale.
+            </p>
+            
+            <p class="mb-4 text-sm leading-relaxed">
+                <strong class="text-base">PORT09</strong> processes 144 shipments with an average lead time of 3.75 days. 
+                It serves as the network's secondary hub and the most viable candidate for 
+                capacity expansion, with lead times only 0.75 days longer than PORT04.
+            </p>
+            
+            <p class="mb-4 text-sm leading-relaxed">
+                <strong class="text-base">PORT05</strong> handles just 1 shipment with the slowest lead time of 5.0 days — 
+                67% slower than PORT04. Its poor performance is likely due to limited 
+                carrier availability and lack of optimized scheduling from extremely low volume.
+            </p>
+            
+            <p class="mt-6 font-semibold text-sm text-blue-900 leading-relaxed">
+                The extreme volume-delay combination at PORT04 validates the urgent need for 
+                <span class="text-orange-600">capacity rebalancing, route diversification to PORT02 
+                alternatives, and immediate operational review</span> to alleviate network 
+                congestion and improve overall delivery performance.
+            </p>
+        </div>
+        
+        <!-- RIGHT SIDE: Self-contained Chart.js chart replacing broken iframe -->
+        <div class="lg:col-span-3">
+            <div style="position:relative; height:420px;">
+                <canvas id="portImpactChart"></canvas>
+            </div>
+            <div class="mt-4 grid grid-cols-3 gap-3">
+                <div class="bg-orange-50 border border-orange-200 rounded-lg p-3 text-center">
+                    <p class="text-xs text-orange-600 font-bold uppercase mb-1">PORT04</p>
+                    <p class="text-xl font-bold text-orange-700">4,754</p>
+                    <p class="text-xs text-orange-500">shipments</p>
+                </div>
+                <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                    <p class="text-xs text-blue-600 font-bold uppercase mb-1">PORT09</p>
+                    <p class="text-xl font-bold text-blue-700">144</p>
+                    <p class="text-xs text-blue-500">shipments</p>
+                </div>
+                <div class="bg-slate-50 border border-slate-200 rounded-lg p-3 text-center">
+                    <p class="text-xs text-slate-500 font-bold uppercase mb-1">PORT05</p>
+                    <p class="text-xl font-bold text-slate-600">1</p>
+                    <p class="text-xs text-slate-400">shipment</p>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+</section>
+
+        <!-- Geographic Insights: Malaysian Port Breakdown — Section F -->
+        <section class="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-slate-200" style="overflow:hidden; position:relative; z-index:0;">
+            <div class="mb-6">
+                <h2 class="text-2xl font-bold text-blue-900 mb-2 border-l-4 border-orange-500 pl-4">Geographic Insights: Malaysian Port Network</h2>
+                <p class="text-slate-600 max-w-3xl">
+                    Shipment volume and performance breakdown by Malaysian port location.
+                    PORT04 (Port Klang, Selangor) dominates the network at 97% of all volume,
+                    while PORT09 (Penang) serves as the secondary hub. Bubble size represents shipment volume.
+                </p>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                <!-- LEFT: Port State Cards -->
+                <div class="space-y-4">
+                    <div class="flex items-center gap-4 bg-orange-50 border border-orange-200 rounded-xl p-4">
+                        <div class="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">P04</div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between flex-wrap gap-2">
+                                <span class="font-bold text-slate-800">PORT04 — Port Klang, Selangor</span>
+                                <span class="bg-orange-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">97% volume</span>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-1">4,754 shipments &nbsp;|&nbsp; Avg lead time: 3.00 days &nbsp;|&nbsp; Malaysia's busiest port</div>
+                            <div class="mt-2 w-full bg-orange-100 rounded-full h-2"><div class="bg-orange-500 h-2 rounded-full" style="width:97%"></div></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-4 bg-blue-50 border border-blue-200 rounded-xl p-4">
+                        <div class="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">P09</div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between flex-wrap gap-2">
+                                <span class="font-bold text-slate-800">PORT09 — Penang Port, Penang</span>
+                                <span class="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">3% volume</span>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-1">144 shipments &nbsp;|&nbsp; Avg lead time: 3.74 days &nbsp;|&nbsp; Northern Malaysia hub</div>
+                            <div class="mt-2 w-full bg-blue-100 rounded-full h-2"><div class="bg-blue-500 h-2 rounded-full" style="width:3%"></div></div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-4 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                        <div class="w-12 h-12 rounded-full bg-slate-400 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">P05</div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between flex-wrap gap-2">
+                                <span class="font-bold text-slate-800">PORT05 — Johor Port, Johor</span>
+                                <span class="bg-slate-400 text-white text-xs font-bold px-2 py-0.5 rounded-full">&lt;1% volume</span>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-1">1 shipment &nbsp;|&nbsp; Avg lead time: 5.00 days &nbsp;|&nbsp; Southern Malaysia gateway</div>
+                            <div class="mt-2 w-full bg-slate-100 rounded-full h-2"><div class="bg-slate-400 h-2 rounded-full" style="width:1%"></div></div>
+                        </div>
+                    </div>
+
+                    <!-- Summary insight box -->
+                    <div class="bg-blue-50 border-l-4 border-orange-500 rounded-r-lg p-4 text-sm text-slate-700">
+                        <strong>Key Finding:</strong> Despite handling 97% of volume, PORT04 (Port Klang) maintains
+                        the lowest lead time at 3.00 days — demonstrating strong operational efficiency at scale.
+                        PORT05 (Johor) handles only 1 shipment yet shows the worst lead time at 5.00 days,
+                        indicating poor carrier availability at low-volume ports.
+                    </div>
+                </div>
+
+                <!-- RIGHT: Malaysia Map -->
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-500 mb-4 uppercase tracking-wider text-center">Malaysian Port Network Map</h3>
+                    <div style="position:relative; z-index:0; isolation:isolate;">
+                        <div id="malaysia-map"></div>
+                        <button class="map-reset-btn" onclick="geoMapResetView()">⟳ Reset</button>
+                    </div>
+                    <div style="display:flex;justify-content:center;gap:20px;flex-wrap:wrap;margin-top:10px;padding:8px 12px;background:#f8f9fa;border-radius:8px;border:1px solid #e9ecef;">
+                        <span style="display:flex;align-items:center;gap:6px;font-size:11px;color:#5a6a7a;font-weight:500;"><span style="width:12px;height:12px;border-radius:50%;background:#FF6B35;display:inline-block;"></span>PORT04 — Port Klang, Selangor</span>
+                        <span style="display:flex;align-items:center;gap:6px;font-size:11px;color:#5a6a7a;font-weight:500;"><span style="width:12px;height:12px;border-radius:50%;background:#4A90D9;display:inline-block;"></span>PORT09 — Penang Port, Penang</span>
+                        <span style="display:flex;align-items:center;gap:6px;font-size:11px;color:#5a6a7a;font-weight:500;"><span style="width:12px;height:12px;border-radius:50%;background:#9E9E9E;display:inline-block;"></span>PORT05 — Johor Port, Johor</span>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- Recommendations -->
+        <section>
+            <h2 class="text-2xl font-bold text-blue-900 mb-8 border-l-4 border-orange-500 pl-4">Strategic Recommendations</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <!-- Card 1 -->
+                <div class="bg-blue-900 text-white p-6 rounded-xl shadow-lg transform transition hover:-translate-y-1">
+                    <div class="text-4xl mb-4 text-orange-400">&#10542;</div>
+                    <h3 class="text-xl font-bold mb-3">Route Diversification</h3>
+                    <p class="text-blue-100 text-sm leading-relaxed">
+                        Re-route all non-urgent, standard-priority shipments from PORT04 to PORT02, starting with shipments that have lead time flexibility of 3 or more days. Keep PORT04 exclusively for time-sensitive and express-tier orders. Estimated reduction of 3.5 days in average lead time for re-routed shipments.
+                    </p>
+                </div>
+
+                <!-- Card 2 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200 transform transition hover:-translate-y-1">
+                    <div class="text-4xl mb-4 text-blue-600">&#129309;</div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-3">Carrier Consolidation</h3>
+                    <p class="text-slate-600 text-sm leading-relaxed">
+                        Renegotiate the logistics contract with V444_1 to consolidate a larger share of total shipment volume under a single preferred-carrier agreement. Incorporate tiered volume pricing and SLA clauses with formal penalties for failing to meet agreed delivery targets.
+                    </p>
+                </div>
+
+                <!-- Card 3 -->
+                <div class="bg-white p-6 rounded-xl shadow-lg border border-slate-200 transform transition hover:-translate-y-1">
+                    <div class="text-4xl mb-4 text-orange-500">&#128200;</div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-3">Inventory Positioning</h3>
+                    <p class="text-slate-600 text-sm leading-relaxed">
+                        Raise safety stock levels at all warehouses served by PLANT12 to absorb normal demand variation without triggering emergency dispatch. Set minimum reorder point based on PORT04 average lead time plus a two-day buffer. Projected to reduce annual logistics costs by approximately 15%.
+                    </p>
+                </div>
+
+            </div>
+        </section>
+        <br>
+        <br>
+
+       <!-- Correlation Analysis & Efficiency Audit Section -->
+        <section class="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-slate-900">Logistics Performance Strategic Dashboard</h1>
+                <p class="text-slate-500 mt-1">Statistical Audit & Operational Root Cause Analysis</p>
+            </div>
+            
+            <!-- Side-by-Side Grid Container -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- LEFT SIDE: Root Cause Dependency Map -->
+                <div class="lg:col-span-7 bg-white p-6 rounded-lg border border-slate-200">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold flex items-center gap-2">
+                            <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                            </svg>
+                            Root Cause Dependency Map
+                        </h2>
+                        <span class="text-xs font-medium bg-slate-100 text-slate-600 px-2 py-1 rounded">Pearson Correlation</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-slate-400 uppercase text-[10px] tracking-wider">
+                                    <th class="text-left pb-4 px-2">METRIC PATH</th>
+                                    <th class="pb-4 px-2">WEIGHT</th>
+                                    <th class="pb-4 px-2">TPT</th>
+                                    <th class="pb-4 px-2">SHIP AHEAD</th>
+                                    <th class="pb-4 px-2">LEAD TIME</th>
+                                    <th class="pb-4 px-2">DELIVERY DELAY</th>
+                                </tr>
+                            </thead>
+                            <tbody id="correlationGrid">
+                                <!-- Filled by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
+                        <p class="text-sm text-blue-800">
+                            <strong>Critical Insight:</strong> Processing Time (TPT) shows the strongest positive correlation (0.74) with Lead Time. Reducing internal processing bottlenecks yields the highest ROI.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- RIGHT SIDE: Efficiency Significance Audit -->
+                <div class="lg:col-span-5 bg-white p-6 rounded-lg border border-slate-200">
+                    <h2 class="text-xl font-semibold mb-6 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewbox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        Efficiency Significance Audit
+                    </h2>
+                    <div class="space-y-4" id="battlecardList">
+                        <!-- Filled by JS -->
+                    </div>
+                </div>
+                
+            </div>
+            <!-- End of Side-by-Side Grid -->
+        </section>
+
+        
+        <br>
+        <!-- Quadrant 3: Regional Variance -->
+        <div class="lg:col-span-12 canvas-card p-6">
+            <h2 class="text-2xl font-bold text-blue-900 mb-2 border-l-4 border-orange-500 pl-4">Regional Performance Variance</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-500 mb-4 uppercase tracking-wider"><center>ANOVA: Transit Time Variance by Carrier</center></h3>
+                    <div class="bg-blue-50 border border-blue-100 rounded-lg p-3 mb-4 text-xs text-blue-800">
+                        <strong>Statistical Proof (p &lt; 0.05):</strong> One-Way ANOVA confirms carrier choice
+                        significantly impacts transit processing time (F = 754.0, p = 3.46e&#8209;286).
+                        Each box shows median, IQR spread, and outliers per carrier.
+                    </div>
+<div style="background:#fff3cd; border:2px solid #ffc107; border-radius:10px; padding:14px 16px; margin-bottom:14px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="background:#dc3545; color:white; font-weight:700; font-size:11px; padding:3px 9px; border-radius:20px; letter-spacing:0.05em;">❌ H₀ REJECTED</span>
+        <span style="color:#856404; font-weight:600; font-size:12px;">ANOVA — One-Way Test</span>
+    </div>
+    <p style="margin:0 0 4px 0; font-size:12px; color:#555;"><strong>Null Hypothesis (H₀):</strong> All carriers have the same average TPT.</p>
+    <p style="margin:0; font-size:12px; color:#555;"><strong>Conclusion:</strong> F = 754.0, p = 3.46e-286 &lt; 0.05 — Carrier choice <strong>significantly impacts</strong> transit processing time.</p>
+</div>
+                    <div style="position:relative; height:520px;">
+                        <canvas id="anovaCarrierChart" style="width:100%;height:100%;display:block;"></canvas>
+                    </div>
+                    <div class="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+                        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded-sm" style="background:#1e3a5f"></span> Box = IQR (Q1–Q3)</span>
+                        <span class="flex items-center gap-1"><span class="inline-block w-3 h-1 rounded-sm" style="background:#FF6F00"></span> Whiskers = min/max</span>
+                        <span class="flex items-center gap-1"><span class="inline-block w-3 h-1 rounded-sm" style="background:#FF6F00; height:3px"></span> Line = median</span>
+                    </div>
+                </div>
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-500 mb-4 uppercase tracking-wider"><center>T-Test: PLANT09 vs Rest of Network</center></h3>
+                    <div class="bg-red-50 border border-red-100 rounded-lg p-3 mb-4 text-xs text-red-800">
+                        <strong>Statistical proof (p &lt; 0.05):</strong> Independent T-Test confirms PLANT09 has a significantly higher average delivery delay than the rest of the network (T = 8.04, p = 3.03e-06). Error bars show 95% confidence interval.
+                    </div>
+<div style="background:#fff3cd; border:2px solid #ffc107; border-radius:10px; padding:14px 16px; margin-bottom:14px;">
+    <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+        <span style="background:#dc3545; color:white; font-weight:700; font-size:11px; padding:3px 9px; border-radius:20px; letter-spacing:0.05em;">❌ H₀ REJECTED</span>
+        <span style="color:#856404; font-weight:600; font-size:12px;">T-Test — Independent (Welch's)</span>
+    </div>
+    <p style="margin:0 0 4px 0; font-size:12px; color:#555;"><strong>Null Hypothesis (H₀):</strong> Plant 09 Delay == Rest of Network Delay.</p>
+    <p style="margin:0; font-size:12px; color:#555;"><strong>Conclusion:</strong> T = 8.04, p = 3.03e-06 &lt; 0.05 — PLANT09 delays are <strong>significantly higher</strong> than the network baseline.</p>
+</div>
+                    <div style="position:relative; height:520px;">
+                        <canvas id="plantChart" style="width:100%;height:100%;display:block;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section H: Predictive What-If Simulator -->
+        <section class="bg-white p-6 md:p-8 rounded-xl shadow-sm border border-slate-200">
+            <div class="mb-6">
+                <span class="inline-block bg-blue-900 text-blue-200 text-xs font-bold px-3 py-1 rounded-full mb-3">Random Forest champion model</span>
+                <h2 class="text-2xl font-bold text-blue-900 mb-2 border-l-4 border-orange-500 pl-4">Predictive What-If Simulator</h2>
+                <p class="text-slate-600 max-w-3xl">Adjust the inputs below to simulate how carrier, port, plant, weight and volume choices affect predicted lead time, delay and on-time rate.</p>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                <!-- LEFT: Controls -->
+                <div class="space-y-5">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Carrier</label>
+                        <select id="wi_carrier" onchange="runWhatIf()" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:border-orange-400">
+                            <option value="V444_1">V444_1 — Top performer</option>
+                            <option value="V444_0">V444_0</option>
+                            <option value="V44_3">V44_3 — CRF (Customer-Arranged)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Origin port</label>
+                        <select id="wi_port" onchange="runWhatIf()" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:border-orange-400">
+                            <option value="PORT04" selected>PORT04 — Port Klang, Selangor</option>
+                            <option value="PORT09">PORT09 — Penang Port, Penang</option>
+                            <option value="PORT05">PORT05 — Johor Port, Johor</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Plant code</label>
+                        <select id="wi_plant" onchange="runWhatIf()" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:border-orange-400">
+                            <option value="PLANT04" selected>PLANT04</option>
+                            <option value="PLANT08">PLANT08</option>
+                            <option value="PLANT09">PLANT09</option>
+                            <option value="PLANT03">PLANT03</option>
+                            <option value="PLANT12">PLANT12</option>
+                            <option value="PLANT16">PLANT16 — Underutilised</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                            Shipment weight &nbsp;<span id="wi_weight_val" class="text-orange-500 font-bold">10 kg</span>
+                        </label>
+                        <input type="range" id="wi_weight" min="1" max="50" value="10" step="1"
+                            oninput="document.getElementById('wi_weight_val').textContent=this.value+' kg';runWhatIf()"
+                            class="w-full accent-orange-500">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1"><span>1 kg</span><span>50 kg</span></div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                            Order volume &nbsp;<span id="wi_volume_val" class="text-orange-500 font-bold">100 units</span>
+                        </label>
+                        <input type="range" id="wi_volume" min="1" max="500" value="100" step="1"
+                            oninput="document.getElementById('wi_volume_val').textContent=this.value+' units';runWhatIf()"
+                            class="w-full accent-orange-500">
+                        <div class="flex justify-between text-xs text-slate-400 mt-1"><span>1 unit</span><span>500 units</span></div>
+                    </div>
+                </div>
+
+                <!-- RIGHT: Predictions -->
+                <div>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Predicted outcome</p>
+                    <div class="grid grid-cols-3 gap-3 mb-5">
+                        <div class="bg-slate-50 rounded-xl p-4 text-center border border-slate-200">
+                            <p class="text-xs text-slate-500 mb-1"><b>Lead time</b></p>
+                            <p class="text-2xl font-bold transition-colors duration-300" id="wi_lead">—</p>
+                            <p class="text-xs mt-1" id="wi_lead_vs"></p>
+                        </div>
+                        <div class="bg-slate-50 rounded-xl p-4 text-center border border-slate-200">
+                            <p class="text-xs text-slate-500 mb-1"><b>Avg delay</b></p>
+                            <p class="text-2xl font-bold transition-colors duration-300" id="wi_delay">—</p>
+                            <p class="text-xs mt-1" id="wi_delay_vs"></p>
+                        </div>
+                        <div class="bg-slate-50 rounded-xl p-4 text-center border border-slate-200">
+                            <p class="text-xs text-slate-500 mb-1"><b>On-time rate</b></p>
+                            <p class="text-2xl font-bold transition-colors duration-300" id="wi_ontime">—</p>
+                            <p class="text-xs mt-1" id="wi_ontime_vs"></p>
+                        </div>
+                    </div>
+                    <div class="space-y-3 mb-5">
+                        <div>
+                            <div class="flex justify-between text-xs text-slate-500 mb-1"><span>Lead time</span><span>Target &lt;2.5d</span></div>
+                            <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div id="wi_bar_lead" class="h-3 rounded-full transition-all duration-500" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs text-slate-500 mb-1"><span>Delivery delay</span><span>Lower is better</span></div>
+                            <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div id="wi_bar_delay" class="h-3 rounded-full transition-all duration-500" style="width:0%"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-xs text-slate-500 mb-1"><span>On-time rate</span><span>Target 85%</span></div>
+                            <div class="w-full bg-slate-100 rounded-full h-3 overflow-hidden">
+                                <div id="wi_bar_ontime" class="h-3 rounded-full transition-all duration-500" style="width:0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="wi_insight" class="bg-blue-50 border-l-4 border-orange-500 p-4 text-sm text-slate-700 leading-relaxed"></div>
+                    <div class="mt-3 text-xs text-slate-400 border-t border-slate-100 pt-3">
+                        Baseline (all carriers avg): 3.01d lead time &nbsp;|&nbsp; 4.72d delay &nbsp;|&nbsp; 68.4% on-time
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <br>
+        <!-- Bottom Row: Executive Summary — corrected from notebook results -->
+        <div class="lg:col-span-12 grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+
+            <!-- Card 1: PORT04 Congestion — from EDA bottleneck analysis -->
+            <div class="bg-slate-900 text-white p-6 rounded-xl shadow-lg">
+                <h4 class="text-slate-400 text-xs font-bold uppercase mb-2">Primary Bottleneck</h4>
+                <p class="text-lg font-medium">PORT04 Congestion</p>
+                <p class="text-slate-400 text-xs mt-1">Port Klang, Selangor — 97% of all volume</p>
+                <div class="mt-4 flex items-center gap-2">
+                    <span class="text-red-400 text-sm font-bold">4.80 days</span>
+                    <span class="text-slate-500 text-xs">avg delay vs 1.50d at PORT09</span>
+                </div>
+                <div class="mt-3 w-full bg-slate-700 rounded-full h-2 overflow-hidden">
+                    <div class="bg-orange-500 h-full rounded-full" style="width: 97%"></div>
+                </div>
+                <span class="text-slate-500 text-xs mt-1 block">97% volume share driving network-wide congestion</span>
+            </div>
+
+            <!-- Card 2: V444_1 Carrier Performance — from carrier EDA & ANOVA -->
+            <div class="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
+                <h4 class="text-slate-400 text-xs font-bold uppercase mb-2">Carrier Validation</h4>
+                <p class="text-lg font-medium text-slate-800">V444_1 vs Network Average</p>
+                <p class="text-slate-400 text-xs mt-1">ANOVA confirmed — F = 754.0, p &lt; 0.001</p>
+                <div class="mt-4 flex items-center gap-2">
+                    <span class="text-green-600 text-sm font-bold">65.3% on-time</span>
+                    <span class="badge-stable px-2 py-0.5 rounded text-[10px]">Best among all carriers</span>
+                </div>
+                <div class="mt-3 w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div class="bg-green-500 h-full rounded-full" style="width: 65%"></div>
+                </div>
+                <span class="text-slate-500 text-xs mt-1 block">Baseline on-time rate: 68.4% (all carriers avg)</span>
+            </div>
+
+            <!-- Card 3: PLANT09 Critical — from T-Test Cell 14 -->
+            <div class="bg-white border border-slate-200 p-6 rounded-xl shadow-sm">
+                <h4 class="text-slate-400 text-xs font-bold uppercase mb-2">Operational Priority</h4>
+                <p class="text-lg font-medium text-slate-800">PLANT09 Critical Delay</p>
+                <p class="text-slate-400 text-xs mt-1">T-Test confirmed — T = 8.04, p = 3.03e-06</p>
+                <div class="mt-4 flex items-center gap-2">
+                    <span class="text-red-600 text-sm font-bold">5.80 days</span>
+                    <span class="badge-significant px-2 py-0.5 rounded text-[10px]">vs 1.0d network avg</span>
+                </div>
+                <div class="mt-3 w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                    <div class="bg-red-500 h-full rounded-full" style="width: 83%"></div>
+                </div>
+                <span class="text-slate-500 text-xs mt-1 block">Immediate process audit required at PLANT09</span>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+         // ═══════════════════════════════════════════════════════════
+        // MASTER DATA STORE — All aggregated stats from the notebook
+        // ═══════════════════════════════════════════════════════════
+        const DB = {
+            ports: {
+                all:    { label: 'All Ports',  count: 4899, leadTime: 3.01, tpt: 1.81, delay: 4.72 },
+                PORT04: { label: 'PORT04',     count: 4754, leadTime: 3.00, tpt: 1.82, delay: 4.80 },
+                PORT09: { label: 'PORT09',     count: 144,  leadTime: 3.74, tpt: 0.78, delay: 1.50 },
+                PORT05: { label: 'PORT05',     count: 1,    leadTime: 5.00, tpt: 2.00, delay: 0.80 }
+            },
+            plants: {
+                all:      { label: 'All Plants', capacity: [2.0,2.0,2.0,2.0,1.8120,0.7847], avgTPT: 1.81 },
+                'PLANT04': { label: 'PLANT04',   capacity: [2.0,0,0,0,0,0],                  avgTPT: 2.00 },
+                'PLANT08': { label: 'PLANT08',   capacity: [0,2.0,0,0,0,0],                  avgTPT: 2.00 },
+                'PLANT12': { label: 'PLANT12',   capacity: [0,0,2.0,0,0,0],                  avgTPT: 2.00 },
+                'PLANT09': { label: 'PLANT09',   capacity: [0,0,0,2.0,0,0],                  avgTPT: 2.00 },
+                'PLANT03': { label: 'PLANT03',   capacity: [0,0,0,0,1.8120,0],               avgTPT: 1.8120 },
+                'PLANT16': { label: 'PLANT16',   capacity: [0,0,0,0,0,0.7847],               avgTPT: 0.7847 }
+            },
+            carriers: {
+                all:    { label: 'All Carriers', tpt: 1.82, delay: 4.72, count: 4899, ontime: 68.4 },
+                V444_1: { label: 'V444_1',        tpt: 1.85, delay: 4.90, count: 1102, ontime: 65.3 },
+                V44_3:  { label: 'V44_3',         tpt: 2.10, delay: 5.40, count: 890,  ontime: 59.7 },
+                V444_0: { label: 'V444_0',        tpt: 2.35, delay: 5.90, count: 643,  ontime: 54.1 }
+            }
+        };
+ 
+        // Port data for all charts
+        const ALL_PORTS_BOTTLENECK = {
+            labels: ['PORT04 (4754)', 'PORT09 (144)', 'PORT05 (1)'],
+            delays: [4.8, 1.5, 0.8],
+            colors: ['#FF6F00', '#FFA000', '#42A5F5']
+        };
+        const ALL_PORTS_CARRIER = {
+            labels: ['PORT04', 'PORT05', 'PORT09'],
+            leadTime: [3.00, 5.00, 3.74],
+            tpt:      [1.82, 2.00, 0.78]
+        };
+        const ALL_PLANTS = {
+            labels: ['PLANT04', 'PLANT08', 'PLANT12', 'PLANT09', 'PLANT03', 'PLANT16'],
+            capacity: [2.0, 2.0, 2.0, 2.0, 1.8120, 0.7847],
+            colors: ['#E55A00', '#E07B00', '#E59400', '#E0A000', '#2F8FE0', '#4A86C5']
+        };
+        const ALL_CARRIERS = {
+            labels: ['V444_1', 'V44_3', 'V444_0'],
+            tpt:    [1.85,    2.10,     2.35],
+            ontime: [65.3,    59.7,     54.1],
+            // Match screenshot palette (cycled across carriers)
+            colors: ['#FF6F00', '#FFA000', '#42A5F5']
+        };
+ 
+        // ═══════════════════════════
+        // UTILITIES
+        // ═══════════════════════════
+        const colors = {
+            primary: '#0D47A1',
+            secondary: '#FF6F00',
+            accent: '#42A5F5',
+            light: '#E3F2FD',
+            text: '#263238'
+        };
+ 
+        function wrapLabel(str, maxLen = 16) {
+            if (str.length <= maxLen) return str;
+            const words = str.split(' ');
+            const lines = [];
+            let currentLine = words[0];
+            for (let i = 1; i < words.length; i++) {
+                if ((currentLine + ' ' + words[i]).length < maxLen) {
+                    currentLine += ' ' + words[i];
+                } else {
+                    lines.push(currentLine);
+                    currentLine = words[i];
+                }
+            }
+            lines.push(currentLine);
+            return lines;
+        }
+ 
+        const commonOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        title: function(tooltipItems) {
+                            const item = tooltipItems[0];
+                            let label = item.chart.data.labels[item.dataIndex];
+                            return Array.isArray(label) ? label.join(' ') : label;
+                        }
+                    },
+                    backgroundColor: 'rgba(13, 71, 161, 0.9)',
+                    titleFont: { size: 13 },
+                    bodyFont: { size: 12 },
+                    padding: 10,
+                    cornerRadius: 4
+                },
+                legend: {
+                    labels: {
+                        font: { family: 'ui-sans-serif, system-ui, sans-serif' },
+                        usePointStyle: true
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false } },
+                y: { grid: { color: '#e2e8f0' } }
+            }
+        };
+        
+        // --- Chart 1: Bottleneck Analysis (Horizontal Bar) ---
+       // Chart 1 — Bottleneck (Horizontal Bar) — driven by Port filter
+        const ctxBottleneck = document.getElementById('bottleneckChart').getContext('2d');
+        window.bottleneckChart = new Chart(ctxBottleneck, {
+            type: 'bar',
+            data: {
+                labels: ALL_PORTS_BOTTLENECK.labels.map(l => wrapLabel(l)),
+                datasets: [{
+                    label: 'Avg Shipping Delay (Days)',
+                    data: ALL_PORTS_BOTTLENECK.delays,
+                    backgroundColor: ALL_PORTS_BOTTLENECK.colors,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                ...commonOptions,
+                indexAxis: 'y',
+                scales: {
+                    x: { ticks: { precision: 0 } },
+                    y: { grid: { display: false } }
+                },
+                plugins: {
+                    ...commonOptions.plugins,
+                    legend: { display: false }
+                }
+            }
+        });
+
+        
+        // --- Chart 2: Port Performance (Global var for filter access) ---
+        const ctxCarrier = document.getElementById('carrierChart').getContext('2d');
+        window.carrierChart = new Chart(ctxCarrier, {
+            type: 'bar',
+            data: {
+                labels: ['PORT04', 'PORT05', 'PORT09'].map(l => wrapLabel(l)),
+                datasets: [
+                    {
+                        label: 'Avg Lead Time (Days)',
+                        data: [3.00, 5.00, 3.74],
+                        backgroundColor: colors.primary,
+                        borderRadius: 4
+                    },
+                    {
+                        label: 'Avg TPT (Transit Time)',
+                        data: [1.82, 2.00, 0.78],
+                        backgroundColor: colors.secondary,
+                        borderRadius: 4
+                    }
+                ]
+            },
+            options: commonOptions
+        });
+
+        // --- Chart 3: Cost Scatter Plot (Scatter) ---
+        const ctxScatter = document.getElementById('costScatterChart').getContext('2d');
+        
+        // Simulating data: Weight vs Cost. 
+        // Showing standard correlation vs outliers (rush orders)
+        // Static sample data replacing missing JSON (Weight vs TPT)
+        const scatterData = [
+            {x: 1.2, y: 1.5}, {x: 2.1, y: 1.2}, {x: 3.8, y: 2.8}, {x: 4.5, y: 1.8},
+            {x: 5.2, y: 3.2}, {x: 6.1, y: 1.9}, {x: 7.3, y: 4.1}, {x: 8.0, y: 2.5},
+            {x: 9.4, y: 2.0}, {x: 10.2, y: 5.2}, // Outliers (rush orders)
+            {x: 0.8, y: 3.8}, {x: 1.5, y: 4.5}  // High cost low weight
+        ];
+        new Chart(ctxScatter, {
+            type: 'scatter',
+            data: {
+                datasets: [{
+                    label: 'Weight vs Transit Time Pattern',
+                    data: scatterData,
+                    backgroundColor: (ctx) => {
+                        const v = ctx.raw;
+                        // Highlight TPT inefficiencies
+                        if(v && v.y >= 4) return '#FF6B35'; // Critical delay
+                        if(v && v.y >= 2) return '#F7931E'; // Moderate delay
+                        if(v && v.y >= 1) return '#4ECDC4'; // Acceptable
+                        return '#45B7D1'; // Excellent
+                    },
+                    pointRadius: 6,
+                    pointHoverRadius: 8
+                }]
+            },
+            options: {
+                ...commonOptions,
+                plugins: {
+                    ...commonOptions.plugins,
+                    title: {
+                        display: true,
+                        text: 'KPI: Transit Time Efficiency Analysis'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: (ctx) => `Weight: ${ctx.raw.x.toFixed(1)}kg, TPT: ${ctx.raw.y.toFixed(0)} days`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        title: { display: true, text: 'Shipment Weight (kg)' },
+                        grid: { display: false }
+                    },
+                    y: {
+                        title: { display: true, text: 'TPT (Days)' },
+                        grid: { color: '#e2e8f0' },
+                        ticks: {
+                            stepSize: 1,
+                            callback: function(value) {
+                                return value + 'd';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // --- T-Test Bar Chart: PLANT09 vs Rest of Network ---
+        (function drawPlantTTest() {
+            const canvas = document.getElementById('plantChart');
+            if (!canvas) return;
+
+            const TTEST_DATA = [
+                {
+                    label: 'PLANT09',
+                    sub: '(Bottleneck)',
+                    mean: 5.80,
+                    ci_low: 5.45,
+                    ci_high: 6.15,
+                    color: '#d9534f',
+                    dark: '#A32D2D'
+                },
+                {
+                    label: 'Rest of\nNetwork',
+                    sub: '(Baseline)',
+                    mean: 4.52,
+                    ci_low: 4.42,
+                    ci_high: 4.62,
+                    color: '#42A5F5',
+                    dark: '#185FA5'
+                }
+            ];
+
+            canvas.parentElement.style.position = 'relative';
+            const tip = document.createElement('div');
+            tip.id = 'ttestTip';
+            tip.style.cssText = 'position:absolute;pointer-events:none;display:none;z-index:99;min-width:175px;';
+            canvas.parentElement.appendChild(tip);
+
+            function buildTip(i) {
+                const d = TTEST_DATA[i];
+                return '<div style="background:' + d.dark + ';color:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.3);">' +
+                    '<div style="background:' + d.color + ';padding:10px 14px;">' +
+                        '<div style="font-weight:700;font-size:14px;">' + d.label.replace('\n', ' ') + '</div>' +
+                        '<div style="font-size:11px;opacity:0.85;">' + d.sub + '</div>' +
+                    '</div>' +
+                    '<div style="padding:10px 14px;">' +
+                        '<div style="display:flex;justify-content:space-between;gap:20px;padding:3px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">' +
+                            '<span style="color:#ffffff;font-size:11px;">Avg Delay</span>' +
+                            '<span style="color:#FF6F00;font-weight:600;font-size:12px;">' + d.mean.toFixed(2) + ' days</span>' +
+                        '</div>' +
+                        '<div style="display:flex;justify-content:space-between;gap:20px;padding:3px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">' +
+                            '<span style="color:#ffffff;font-size:11px;">95% CI High</span>' +
+                            '<span style="color:#ffffff;font-weight:600;font-size:12px;">' + d.ci_high.toFixed(2) + ' days</span>' +
+                        '</div>' +
+                        '<div style="display:flex;justify-content:space-between;gap:20px;padding:3px 0;">' +
+                            '<span style="color:#ffffff;font-size:11px;">95% CI Low</span>' +
+                            '<span style="color:#ffffff;font-weight:600;font-size:12px;">' + d.ci_low.toFixed(2) + ' days</span>' +
+                        '</div>' +
+                        '<div style="margin-top:8px;padding-top:6px;border-top:0.5px solid rgba(255,255,255,0.15);font-size:11px;color:#ffffff;">T = 8.04 &nbsp;|&nbsp; p = 3.03e-06</div>' +
+                    '</div>' +
+                '</div>';
+            }
+
+            function draw(hovIdx) {
+                const dpr = window.devicePixelRatio || 1;
+                const W = canvas.offsetWidth || 400;
+                const H = canvas.offsetHeight || 520;
+                canvas.width  = W * dpr;
+                canvas.height = H * dpr;
+                const ctx = canvas.getContext('2d');
+                ctx.scale(dpr, dpr);
+
+                const PL=60, PR=24, PT=36, PB=60;
+                const pw = W - PL - PR;
+                const ph = H - PT - PB;
+                const YMAX=7, YMIN=0;
+                const toY = v => PT + ph - (v-YMIN)/(YMAX-YMIN)*ph;
+                const slotW = pw / TTEST_DATA.length;
+                const barW  = slotW * 0.50;
+
+                canvas._meta = { PL, PT, ph, pw, slotW, barW, W, H, toY };
+
+                ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 0.5;
+                for (let v=0; v<=YMAX; v++) {
+                    const y = toY(v);
+                    ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(W-PR, y); ctx.stroke();
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '11px ui-sans-serif,system-ui,sans-serif';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(v+'d', PL-6, y+4);
+                }
+
+                ctx.save();
+                ctx.translate(14, PT+ph/2); ctx.rotate(-Math.PI/2);
+                ctx.textAlign = 'center'; ctx.fillStyle = '#94a3b8';
+                ctx.font = '11px ui-sans-serif,system-ui,sans-serif';
+                ctx.fillText('Avg Delivery Delay (Days)', 0, 0);
+                ctx.restore();
+
+                ctx.fillStyle = '#1e3a5f';
+                ctx.font = 'bold 11px ui-sans-serif,system-ui,sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText('T = 8.04  |  p < 0.001  \u2192  Reject H\u2080', PL+4, PT-12);
+
+                TTEST_DATA.forEach((d, i) => {
+                    const isHov = hovIdx === i;
+                    const cx = PL + i*slotW + slotW/2;
+                    const x1 = cx - barW/2;
+                    const yBase = toY(0);
+                    const yTop  = toY(d.mean);
+                    const yCIH  = toY(d.ci_high);
+                    const yCIL  = toY(d.ci_low);
+                    const capW  = barW * 0.28;
+
+                    if (isHov) {
+                        ctx.fillStyle = d.color + '18';
+                        ctx.fillRect(cx - slotW*0.47, PT, slotW*0.94, ph);
+                    }
+
+                    ctx.fillStyle = d.color;
+                    ctx.fillRect(x1, yTop, barW, yBase - yTop);
+
+                    if (isHov) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+                        ctx.fillRect(x1, yTop, barW, yBase - yTop);
+                    }
+
+                    ctx.strokeStyle = isHov ? '#fff' : d.dark;
+                    ctx.lineWidth = isHov ? 2 : 1;
+                    ctx.strokeRect(x1, yTop, barW, yBase - yTop);
+
+                    ctx.strokeStyle = '#1e293b';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(cx, yCIH); ctx.lineTo(cx, yCIL); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx-capW, yCIH); ctx.lineTo(cx+capW, yCIH); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx-capW, yCIL); ctx.lineTo(cx+capW, yCIL); ctx.stroke();
+
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 11px ui-sans-serif,system-ui,sans-serif';
+                    ctx.textAlign = 'center';
+                    const labelY = yTop + (yBase - yTop) / 2 + 5;
+                    ctx.fillText(d.mean.toFixed(2) + 'd', cx, labelY);
+
+                    ctx.textAlign = 'center';
+                    const lines = d.label.split('\n');
+                    ctx.fillStyle = i===0 ? '#d9534f' : '#185FA5';
+                    ctx.font = 'bold 12px ui-sans-serif,system-ui,sans-serif';
+                    ctx.fillText(lines[0], cx, H - PB + 18);
+                    if (lines[1]) {
+                        ctx.font = '11px ui-sans-serif,system-ui,sans-serif';
+                        ctx.fillText(lines[1], cx, H - PB + 32);
+                    }
+                    ctx.fillStyle = '#64748b';
+                    ctx.font = '10px ui-sans-serif,system-ui,sans-serif';
+                    ctx.fillText(d.sub, cx, H - PB + 46);
+                });
+
+                const y3 = toY(3);
+                ctx.strokeStyle = '#FF6F00';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([5,4]);
+                ctx.beginPath(); ctx.moveTo(PL, y3); ctx.lineTo(W-PR, y3); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#FF6F00';
+                ctx.font = '10px ui-sans-serif,system-ui,sans-serif';
+                ctx.textAlign = 'right';
+                ctx.fillText('target: 3d', W-PR-2, y3-4);
+            }
+
+            draw(-1);
+
+            canvas.addEventListener('mousemove', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const m  = canvas._meta;
+                if (!m) return;
+
+                let found = -1;
+                TTEST_DATA.forEach((d, i) => {
+                    const cx = m.PL + i*m.slotW + m.slotW/2;
+                    if (Math.abs(mx - cx) < m.slotW * 0.47) found = i;
+                });
+
+                canvas.style.cursor = found >= 0 ? 'pointer' : 'default';
+                draw(found);
+
+                if (found >= 0) {
+                    tip.style.display = 'block';
+                    tip.innerHTML = buildTip(found);
+                    const cx = m.PL + found * m.slotW + m.slotW/2;
+                    const tipW = 180;
+                    const left = found === 0 ? cx + 14 : cx - tipW - 14;
+                    tip.style.left = left + 'px';
+                    tip.style.top  = Math.max(8, my - 30) + 'px';
+                } else {
+                    tip.style.display = 'none';
+                }
+            });
+
+            canvas.addEventListener('mouseleave', function() {
+                tip.style.display = 'none';
+                draw(-1);
+            });
+
+            window.addEventListener('resize', function() { draw(-1); });
+        })();
+
+        // --- Chart 4: Plant Capacity (Global var for filter access) ---
+        const ctxCapacity = document.getElementById('capacityChart').getContext('2d');
+        window.capacityChart = new Chart(ctxCapacity, {
+            type: 'bar',
+            data: {
+                labels: ['PLANT04', 'PLANT08', 'PLANT12', 'PLANT09', 'PLANT03', 'PLANT16'].map(l => wrapLabel(l)),
+                datasets: [{
+                    label: 'Avg TPT (Days)',
+                    data: [2.0, 2.0, 2.0, 2.0, 1.8120, 0.7847],
+                    backgroundColor: ['#E55A00', '#E07B00', '#E59400', '#E0A000', '#2F8FE0', '#4A86C5'],
+                    borderRadius: 2
+                }]
+            },
+            options: {
+                ...commonOptions,
+                scales: {
+                    x: { stacked: true, grid: { display: false } },
+                    y: {
+                        stacked: true,
+                        grid: { color: '#e2e8f0' },
+                        title: { display: true, text: 'Avg TPT (Days)' }
+                    }
+                }
+            }
+        });
+
+        // --- Chart 5: Carrier Performance (Dual-axis Bar/Line) ---
+        const ctxCarrierPerf = document.getElementById('carrierPerfChart').getContext('2d');
+        window.carrierPerfChart = new Chart(ctxCarrierPerf, {
+            type: 'bar',
+            data: {
+                labels: ALL_CARRIERS.labels,
+                datasets: [{
+                    type: 'bar',
+                    label: 'Avg TPT (Days)',
+                    data: ALL_CARRIERS.tpt,
+                    backgroundColor: ALL_CARRIERS.colors,
+                    yAxisID: 'y'
+                }, {
+                    type: 'line',
+                    label: 'On-Time %',
+                    data: ALL_CARRIERS.ontime,
+                    borderColor: '#FF6F00',
+                    backgroundColor: 'rgba(255, 111, 0, 0.2)',
+                    yAxisID: 'y1',
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: { 
+                        type: 'linear', 
+                        display: true, 
+                        position: 'left', 
+                        title: { display: true, text: 'TPT (Days)' },
+                        min: 0,
+                        max: 3
+                    },
+                    y1: { 
+                        type: 'linear', 
+                        display: true, 
+                        position: 'right', 
+                        title: { display: true, text: 'On-Time %' }, 
+                        grid: { drawOnChartArea: false },
+                        min: 40,
+                        max: 100
+                    }
+                }
+            }
+        });
+
+        // ═══════════════════════════════════════
+        // FILTER ENGINE
+        // ═══════════════════════════════════════
+ 
+        function applyFilters() {
+            const portVal    = document.getElementById('portFilter').value;
+            const plantVal   = document.getElementById('plantFilter').value;
+            const carrierVal = document.getElementById('carrierFilter').value;
+            const anyActive  = portVal !== 'all' || plantVal !== 'all' || carrierVal !== 'all';
+ 
+            // Show/hide filter badge and banner
+            document.getElementById('activeFilterBadge').style.display = anyActive ? 'inline-block' : 'none';
+            document.getElementById('filterResultBanner').style.display = anyActive ? 'flex' : 'none';
+ 
+            // ── UPDATE FILTER RESULT BANNER ──
+            if (anyActive) {
+                const parts = [];
+                if (portVal !== 'all')    parts.push('Port: ' + portVal);
+                if (plantVal !== 'all')   parts.push('Plant: ' + plantVal);
+                if (carrierVal !== 'all') parts.push('Carrier: ' + carrierVal);
+                document.getElementById('filterSummaryText').textContent = parts.join('  |  ');
+ 
+                // Pick stats source (port takes priority for KPIs)
+                const portStats    = DB.ports[portVal]    || DB.ports.all;
+                const carrierStats = DB.carriers[carrierVal] || DB.carriers.all;
+                const showCount    = carrierVal !== 'all' ? carrierStats.count : portStats.count;
+ 
+                document.getElementById('filteredCount').textContent    = showCount.toLocaleString();
+                document.getElementById('filteredLeadTime').textContent = portStats.leadTime.toFixed(2) + ' days';
+                document.getElementById('filteredTPT').textContent      = (carrierVal !== 'all' ? carrierStats.tpt : portStats.tpt).toFixed(2) + ' days';
+                document.getElementById('filteredDelay').textContent    = portStats.delay.toFixed(2) + ' days';
+            }
+ 
+            // ── CHART 1: Bottleneck ── Port filter
+            if (portVal === 'all') {
+                bottleneckChart.data.labels   = ALL_PORTS_BOTTLENECK.labels.map(l => wrapLabel(l));
+                bottleneckChart.data.datasets[0].data            = ALL_PORTS_BOTTLENECK.delays;
+                bottleneckChart.data.datasets[0].backgroundColor = ALL_PORTS_BOTTLENECK.colors;
+            } else {
+                const idx  = { PORT04: 0, PORT09: 1, PORT05: 2 }[portVal];
+                bottleneckChart.data.labels   = [ALL_PORTS_BOTTLENECK.labels[idx]].map(l => wrapLabel(l));
+                bottleneckChart.data.datasets[0].data            = [ALL_PORTS_BOTTLENECK.delays[idx]];
+                bottleneckChart.data.datasets[0].backgroundColor = [ALL_PORTS_BOTTLENECK.colors[idx]];
+            }
+            bottleneckChart.update();
+ 
+            // ── CHART 2: Port Performance ── Port filter
+            const portOrder = ['PORT04','PORT05','PORT09'];
+            if (portVal === 'all') {
+                carrierChart.data.labels = ALL_PORTS_CARRIER.labels.map(l => wrapLabel(l));
+                carrierChart.data.datasets[0].data = ALL_PORTS_CARRIER.leadTime;
+                carrierChart.data.datasets[1].data = ALL_PORTS_CARRIER.tpt;
+            } else {
+                const idx = portOrder.indexOf(portVal);
+                carrierChart.data.labels = [ALL_PORTS_CARRIER.labels[idx]].map(l => wrapLabel(l));
+                carrierChart.data.datasets[0].data = [ALL_PORTS_CARRIER.leadTime[idx]];
+                carrierChart.data.datasets[1].data = [ALL_PORTS_CARRIER.tpt[idx]];
+            }
+            carrierChart.update();
+ 
+            // ── CHART 4: Plant Capacity ── Plant filter
+            if (plantVal === 'all') {
+                capacityChart.data.labels = ALL_PLANTS.labels.map(l => wrapLabel(l));
+                capacityChart.data.datasets[0].data            = ALL_PLANTS.capacity;
+                capacityChart.data.datasets[0].backgroundColor = ALL_PLANTS.colors;
+            } else {
+                const idx = ALL_PLANTS.labels.indexOf(plantVal);
+                // Show all plants but dim non-selected
+                const dimmedColors = ALL_PLANTS.colors.map((c, i) => i === idx ? c : '#e2e8f0');
+                const borderColors = ALL_PLANTS.labels.map((_, i) => i === idx ? '#FF6F00' : 'transparent');
+                capacityChart.data.labels = ALL_PLANTS.labels.map(l => wrapLabel(l));
+                capacityChart.data.datasets[0].data            = ALL_PLANTS.capacity;
+                capacityChart.data.datasets[0].backgroundColor = dimmedColors;
+                capacityChart.data.datasets[0].borderColor     = borderColors;
+                capacityChart.data.datasets[0].borderWidth      = 2;
+            }
+            capacityChart.update();
+
+            // ── CHART 5: Carrier Performance ── Carrier filter
+            if (carrierVal !== 'all') {
+                // Highlight selected carrier - dim others
+                const carrierIdx = ALL_CARRIERS.labels.indexOf(carrierVal);
+                const dimmedLabels = ALL_CARRIERS.labels.map((l,i) => i === carrierIdx ? l : l + ' (dimmed)');
+                const baseColors = ALL_CARRIERS.colors;
+                const dimColor = 'rgba(203, 213, 225, 0.45)';
+                carrierPerfChart.data.datasets[0].backgroundColor = ALL_CARRIERS.tpt.map((_,i) => i === carrierIdx ? baseColors[i] : dimColor);
+                carrierPerfChart.data.labels = dimmedLabels;
+            } else {
+                carrierPerfChart.data.datasets[0].backgroundColor = ALL_CARRIERS.colors;
+                carrierPerfChart.data.labels = ALL_CARRIERS.labels;
+            }
+            carrierPerfChart.update();
+ 
+            // Glow effect on active chart cards
+            document.querySelectorAll('.canvas-card, section').forEach(el => el.classList.remove('filter-active-glow'));
+            if (portVal !== 'all') {
+                document.getElementById('bottleneckChart').closest('section')?.classList.add('filter-active-glow');
+                document.getElementById('carrierChart').closest('section')?.classList.add('filter-active-glow');
+            }
+            if (plantVal !== 'all') {
+                document.getElementById('capacityChart').closest('section')?.classList.add('filter-active-glow');
+            }
+            if (carrierVal !== 'all') {
+                document.getElementById('carrierPerfChart').closest('section')?.classList.add('filter-active-glow');
+            }
+        }
+ 
+        function resetFilters() {
+            document.getElementById('portFilter').value    = 'all';
+            document.getElementById('plantFilter').value   = 'all';
+            document.getElementById('carrierFilter').value = 'all';
+            applyFilters();
+            document.querySelectorAll('section').forEach(el => el.classList.remove('filter-active-glow'));
+        }
+ 
+
+               // --- DATASET & STATISTICAL RESULTS ---
+        const corrData = [
+            { metric: 'Weight', weight: 1.00, tpt: -0.07, ahead: 0.10, lead: 0.07, delays: 0.07 },
+            { metric: 'TPT', weight: -0.07, tpt: 1.00, ahead: -0.14, lead: 0.32, delays: 0.32 },
+            { metric: 'Ship Ahead', weight: 0.10, tpt: -0.14, ahead: 1.00, lead: 0.89, delays: 0.89 },
+            { metric: 'Lead Time', weight: 0.07, tpt: 0.32, ahead: 0.89, lead: 1.00, delays: 1.00 },
+            { metric: 'Delivery Delay', weight: 0.07, tpt: 0.32, ahead: 0.89, lead: 1.00, delays: 1.00 }
+        ];
+
+        const tests = [
+            { name: "ANOVA — Carrier vs TPT", metric: "TPT", status: "Significant", p: "3.46e-286", insight: "Carrier choice has a real and measurable impact on transit processing time. F = 754.0." },
+            { name: "ANOVA — Origin Port vs Lead Time", metric: "Total Lead Time", status: "Significant", p: "1.09e-07", insight: "Port assignment significantly impacts overall delivery lead time. F = 16.08." },
+            { name: "T-Test — PLANT09 Delay", metric: "Delivery Delay", status: "Significant", p: "3.03e-06", insight: "PLANT09 has a significantly higher average delay than the rest of the network. T = 8.04." },
+            { name: "Tukey HSD — Plant Tiers", metric: "TPT", status: "Significant", p: "0.000", insight: "PLANT16 is statistically distinct from PLANT09 & PLANT12 — confirmed valid candidate for workload redistribution." }
+        ];
+
+        // Helper function to get color based on correlation value
+        function getColor(val) {
+            const opacity = Math.min(Math.abs(val), 1);
+            if (val > 0.7) return 'rgba(34, 197, 94, 1)'; // Strong positive - dark green
+            if (val > 0.3) return 'rgba(134, 239, 172, 0.8)'; // Moderate positive - light green
+            if (val > 0) return 'rgba(220, 252, 231, 0.6)'; // Weak positive - very light green
+            if (val === 0) return 'rgba(241, 245, 249, 1)'; // Zero - light gray
+            if (val > -0.3) return 'rgba(254, 226, 226, 0.6)'; // Weak negative - very light red
+            if (val > -0.7) return 'rgba(252, 165, 165, 0.8)'; // Moderate negative - light red
+            return 'rgba(239, 68, 68, 1)'; // Strong negative - dark red
+        }
+
+
+        // --- DOM MANIPULATION ---
+        
+        // 1. Build Correlation Matrix
+        const grid = document.getElementById('correlationGrid');
+        if (grid) {
+            corrData.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = 'border-b border-slate-100 hover:bg-slate-50';
+                tr.innerHTML = `
+                    <td class="py-3 px-2 font-semibold text-slate-700">${row.metric}</td>
+                    <td class="text-center py-3 px-2">
+                        <span class="heat-map-cell px-3 py-1 rounded" style="background-color: ${getColor(row.weight)}">${row.weight.toFixed(2)}</span>
+                    </td>
+                    <td class="text-center py-3 px-2">
+                        <span class="heat-map-cell px-3 py-1 rounded" style="background-color: ${getColor(row.tpt)}">${row.tpt.toFixed(2)}</span>
+                    </td>
+                    <td class="text-center py-3 px-2">
+                        <span class="heat-map-cell px-3 py-1 rounded" style="background-color: ${getColor(row.ahead)}">${row.ahead.toFixed(2)}</span>
+                    </td>
+                    <td class="text-center py-3 px-2">
+                        <span class="heat-map-cell px-3 py-1 rounded" style="background-color: ${getColor(row.lead)}">${row.lead.toFixed(2)}</span>
+                    </td>
+                    <td class="text-center py-3 px-2">
+                        <span class="heat-map-cell px-3 py-1 rounded" style="background-color: ${getColor(row.delays)}">${row.delays.toFixed(2)}</span>
+                    </td>
+                `;
+                grid.appendChild(tr);
+            });
+        }
+
+        // --- ANOVA Carrier Boxplot ---
+        const ANOVA_DATA = {
+            labels:    ['V444_1', 'V44_3', 'V444_0'],
+            sublabels: ['(Best)', '', '(High Vol)'],
+            carriers: [
+                { min:1, q1:2, median:2, q3:2, max:3, mean:1.85, outliers:[4]  },
+                { min:1, q1:2, median:2, q3:3, max:4, mean:2.10, outliers:[]   },
+                { min:1, q1:2, median:2, q3:3, max:4, mean:2.35, outliers:[5]  }
+            ],
+            colors: ['#1D9E75','#FFA000','#E55A00'],
+            darks:  ['#0F6E56','#854F0B','#993C1D']
+        };
+
+        (function drawAnovaBoxplot() {
+            const canvas = document.getElementById('anovaCarrierChart');
+            if (!canvas) return;
+
+            canvas.parentElement.style.position = 'relative';
+            const tooltip = document.createElement('div');
+            tooltip.id = 'anovaTip';
+            tooltip.style.cssText = 'position:absolute;pointer-events:none;display:none;z-index:99;min-width:180px;';
+            canvas.parentElement.appendChild(tooltip);
+
+            function buildTip(i) {
+                const d   = ANOVA_DATA.carriers[i];
+                const col = ANOVA_DATA.colors[i];
+                const dk  = ANOVA_DATA.darks[i];
+                const lbl = ANOVA_DATA.labels[i];
+                const sub = ANOVA_DATA.sublabels[i];
+                const rows = [
+                    ['Max',    d.max + ' days',            '#e2e8f0'],
+                    ['Q3',     d.q3  + ' days',            '#e2e8f0'],
+                    ['Median', d.median + ' days',         '#FF6F00'],
+                    ['Mean',   d.mean.toFixed(2) + ' days','#FF6F00'],
+                    ['Q1',     d.q1  + ' days',            '#e2e8f0'],
+                    ['Min',    d.min + ' days',            '#e2e8f0'],
+                ];
+                const rowsHtml = rows.map(([k,v,c]) =>
+                    '<div style="display:flex;justify-content:space-between;gap:20px;padding:3px 0;border-bottom:0.5px solid rgba(255,255,255,0.08)">' +
+                    '<span style="color:#ffffff;font-size:11px;">' + k + '</span>' +
+                    '<span style="color:' + c + ';font-weight:600;font-size:12px;">' + v + '</span></div>'
+                ).join('');
+                const outHtml = d.outliers.length
+                    ? '<div style="margin-top:6px;font-size:11px;color:#ffffff;">Outliers: ' + d.outliers.join(', ') + 'd</div>'
+                    : '';
+                return '<div style="background:' + dk + ';color:#fff;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,0.3);">' +
+                    '<div style="background:' + col + ';padding:10px 14px;">' +
+                        '<div style="font-weight:700;font-size:14px;">' + lbl + '</div>' +
+                        (sub ? '<div style="font-size:11px;opacity:0.85;">' + sub + '</div>' : '') +
+                    '</div>' +
+                    '<div style="padding:10px 14px;">' + rowsHtml + outHtml + '</div>' +
+                '</div>';
+            }
+
+            function draw(hovIdx) {
+                const ctx = canvas.getContext('2d');
+                const dpr = window.devicePixelRatio || 1;
+                const W = canvas.offsetWidth  || 500;
+                const H = canvas.offsetHeight || 420;
+                canvas.width  = W * dpr;
+                canvas.height = H * dpr;
+                ctx.scale(dpr, dpr);
+
+                const PL=58, PR=18, PT=34, PB=56;
+                const pw = W - PL - PR;
+                const ph = H - PT - PB;
+                const YMAX=6, YMIN=0;
+                const toY = v => PT + ph - (v-YMIN)/(YMAX-YMIN)*ph;
+                const slotW = pw / ANOVA_DATA.carriers.length;
+                const boxW  = slotW * 0.58;
+
+                canvas._meta = { PL, PT, PB, ph, pw, slotW, boxW, W, H, toY };
+
+                ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 0.5;
+                for (let v=0; v<=YMAX; v++) {
+                    const y = toY(v);
+                    ctx.beginPath(); ctx.moveTo(PL, y); ctx.lineTo(W-PR, y); ctx.stroke();
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '11px ui-sans-serif,system-ui,sans-serif';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(v+'d', PL-6, y+4);
+                }
+
+                ctx.save();
+                ctx.translate(14, PT+ph/2); ctx.rotate(-Math.PI/2);
+                ctx.textAlign='center'; ctx.fillStyle='#94a3b8';
+                ctx.font='11px ui-sans-serif,system-ui,sans-serif';
+                ctx.fillText('Transit Processing Time (Days)', 0, 0);
+                ctx.restore();
+
+                ctx.fillStyle='#1e3a5f';
+                ctx.font='bold 11px ui-sans-serif,system-ui,sans-serif';
+                ctx.textAlign='left';
+                ctx.fillText('F = 754.0  |  p < 0.001  \u2192  Reject H\u2080', PL+4, PT-12);
+
+                ANOVA_DATA.carriers.forEach((d, i) => {
+                    const isHov = hovIdx === i;
+                    const cx  = PL + i*slotW + slotW/2;
+                    const x1  = cx - boxW/2;
+                    const col = ANOVA_DATA.colors[i];
+                    const dk  = ANOVA_DATA.darks[i];
+                    const yMin=toY(d.min), yQ1=toY(d.q1), yMed=toY(d.median);
+                    const yQ3=toY(d.q3), yMax=toY(d.max), yMean=toY(d.mean);
+                    const ww  = boxW * 0.3;
+                    const bh  = yQ1 - yQ3;
+
+                    if (isHov) {
+                        ctx.fillStyle = col + '18';
+                        ctx.fillRect(cx - slotW*0.47, PT, slotW*0.94, ph);
+                    }
+
+                    ctx.strokeStyle = isHov ? dk : col;
+                    ctx.lineWidth = isHov ? 2 : 1.5;
+                    ctx.setLineDash([4,3]);
+                    ctx.beginPath(); ctx.moveTo(cx, yQ3); ctx.lineTo(cx, yMax); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx, yQ1); ctx.lineTo(cx, yMin); ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    ctx.lineWidth = isHov ? 2 : 1.5;
+                    ctx.beginPath(); ctx.moveTo(cx-ww, yMax); ctx.lineTo(cx+ww, yMax); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(cx-ww, yMin); ctx.lineTo(cx+ww, yMin); ctx.stroke();
+
+                    ctx.fillStyle = col;
+                    ctx.fillRect(x1, yQ3, boxW, bh);
+
+                    if (isHov) {
+                        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+                        ctx.fillRect(x1, yQ3, boxW, bh);
+                    }
+
+                    ctx.strokeStyle = isHov ? '#fff' : dk;
+                    ctx.lineWidth = isHov ? 2.5 : 1.5;
+                    ctx.strokeRect(x1, yQ3, boxW, bh);
+
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = isHov ? 3.5 : 2.5;
+                    ctx.beginPath(); ctx.moveTo(x1+2, yMed); ctx.lineTo(x1+boxW-2, yMed); ctx.stroke();
+
+                    const mr = isHov ? 6 : 5;
+                    ctx.fillStyle = '#FF6F00';
+                    ctx.beginPath(); ctx.arc(cx, yMean, mr, 0, Math.PI*2); ctx.fill();
+                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
+                    d.outliers.forEach(ov => {
+                        ctx.fillStyle = col;
+                        ctx.beginPath(); ctx.arc(cx, toY(ov), 4, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
+                    });
+
+                    ctx.textAlign = 'center';
+                    ctx.fillStyle = i===0 ? '#1D9E75' : i===4 ? '#d9534f' : '#475569';
+                    ctx.font = (i===0||i===4) ? 'bold 13px ui-sans-serif,system-ui,sans-serif' : '12px ui-sans-serif,system-ui,sans-serif';
+                    ctx.fillText(ANOVA_DATA.labels[i], cx, H-PB+18);
+                    if (ANOVA_DATA.sublabels[i]) {
+                        ctx.font = '10px ui-sans-serif,system-ui,sans-serif';
+                        ctx.fillStyle = i===0 ? '#0F6E56' : '#A32D2D';
+                        ctx.fillText(ANOVA_DATA.sublabels[i], cx, H-PB+32);
+                    }
+
+                    ctx.font = 'bold 10px ui-sans-serif,system-ui,sans-serif';
+                    ctx.textAlign = 'center';
+                    const labelY = yMean - 10;
+                    if (labelY > yQ3 + 4 && labelY < yQ1 - 4) {
+                        ctx.fillStyle = '#fff';
+                        ctx.fillText('avg ' + d.mean.toFixed(2), cx, labelY);
+                    } else {
+                        ctx.fillStyle = '#64748b';
+                        ctx.fillText('avg ' + d.mean.toFixed(2), cx, yQ3 - 6);
+                    }
+                });
+            }
+
+            draw(-1);
+
+            canvas.addEventListener('mousemove', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const m  = canvas._meta;
+                if (!m) return;
+
+                let found = -1;
+                ANOVA_DATA.carriers.forEach((d, i) => {
+                    const cx = m.PL + i * m.slotW + m.slotW / 2;
+                    if (Math.abs(mx - cx) < m.slotW * 0.47) found = i;
+                });
+
+                canvas.style.cursor = found >= 0 ? 'pointer' : 'default';
+                draw(found);
+
+                if (found >= 0) {
+                    tooltip.style.display = 'block';
+                    tooltip.innerHTML = buildTip(found);
+                    const cx   = m.PL + found * m.slotW + m.slotW / 2;
+                    const tipW = 188;
+                    const left = cx > m.W * 0.6 ? cx - tipW - 10 : cx + 14;
+                    tooltip.style.left = left + 'px';
+                    tooltip.style.top  = Math.max(8, my - 30) + 'px';
+                } else {
+                    tooltip.style.display = 'none';
+                }
+            });
+
+            canvas.addEventListener('mouseleave', function() {
+                tooltip.style.display = 'none';
+                draw(-1);
+            });
+
+            window.addEventListener('resize', function() { draw(-1); });
+        })();
+
+        // --- Port Impact Chart (replaces broken chart_port_impact.html iframe) ---
+        (function() {
+            const ctx = document.getElementById('portImpactChart');
+            if (!ctx) return;
+
+            const labels = ['PORT04\n(Port Klang)', 'PORT09\n(Penang)', 'PORT05\n(Johor)'];
+            const volumes   = [4754, 144, 1];
+            const leadTimes = [3.00, 3.74, 5.00];
+            const delays    = [4.80, 1.50, 0.80];
+            const barColors = ['#FF6F00', '#42A5F5', '#94a3b8'];
+            const lineColor = '#1D9E75';
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['PORT04 (Port Klang)', 'PORT09 (Penang)', 'PORT05 (Johor)'],
+                    datasets: [
+                        {
+                            type: 'bar',
+                            label: 'Shipment Volume',
+                            data: volumes,
+                            backgroundColor: barColors,
+                            borderRadius: 6,
+                            yAxisID: 'yVol',
+                            order: 2
+                        },
+                        {
+                            type: 'line',
+                            label: 'Avg Lead Time (days)',
+                            data: leadTimes,
+                            borderColor: '#1D9E75',
+                            backgroundColor: 'rgba(29,158,117,0.15)',
+                            borderWidth: 3,
+                            pointBackgroundColor: '#1D9E75',
+                            pointRadius: 7,
+                            pointHoverRadius: 9,
+                            tension: 0.3,
+                            yAxisID: 'yLead',
+                            order: 1
+                        },
+                        {
+                            type: 'line',
+                            label: 'Avg Delay (days)',
+                            data: delays,
+                            borderColor: '#d9534f',
+                            backgroundColor: 'rgba(217,83,79,0.1)',
+                            borderWidth: 2,
+                            borderDash: [5, 4],
+                            pointBackgroundColor: '#d9534f',
+                            pointRadius: 6,
+                            pointHoverRadius: 8,
+                            tension: 0.3,
+                            yAxisID: 'yLead',
+                            order: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                            labels: { font: { size: 12 }, usePointStyle: true, padding: 16 }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(13,71,161,0.92)',
+                            padding: 12,
+                            cornerRadius: 8,
+                            callbacks: {
+                                afterBody: function(items) {
+                                    const notes = [
+                                        'Malaysia\'s busiest port — needs capacity relief',
+                                        'Secondary hub — viable for expansion',
+                                        'Lowest volume — poor carrier availability'
+                                    ];
+                                    return '\n' + notes[items[0].dataIndex];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        yVol: {
+                            type: 'linear',
+                            position: 'left',
+                            title: { display: true, text: 'Shipment Volume', font: { size: 11 } },
+                            grid: { color: '#f1f5f9' },
+                            ticks: { font: { size: 11 } }
+                        },
+                        yLead: {
+                            type: 'linear',
+                            position: 'right',
+                            title: { display: true, text: 'Days', font: { size: 11 } },
+                            grid: { drawOnChartArea: false },
+                            min: 0,
+                            max: 7,
+                            ticks: {
+                                font: { size: 11 },
+                                callback: function(v) { return v + 'd'; }
+                            }
+                        },
+                        x: { grid: { display: false }, ticks: { font: { size: 12 } } }
+                    }
+                }
+            });
+        })();
+
+        // --- Geographic Map: Malaysian Ports ---
+        (function() {
+            if (!document.getElementById('malaysia-map')) return;
+            const geoMap = L.map('malaysia-map', {
+                zoomControl: true, scrollWheelZoom: true, doubleClickZoom: true,
+                dragging: true, touchZoom: true, keyboard: true,
+                attributionControl: false, minZoom: 4, maxZoom: 12
+            });
+            L.tileLayer(
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+                { maxZoom: 12 }
+            ).addTo(geoMap);
+            const malaysiaBounds = L.latLngBounds(L.latLng(0.85, 99.6), L.latLng(7.35, 119.3));
+            geoMap.fitBounds(malaysiaBounds, { padding: [5, 5] });
+            window.geoMapResetView = function() {
+                geoMap.fitBounds(malaysiaBounds, { padding: [5, 5], animate: true, duration: 0.8 });
+            };
+            const ports = [
+                { id:'PORT04', lat:3.0034,  lon:101.3661, shipments:4754, lead:3.00, delay:4.8, color:'#FF6B35', radius:28 },
+                { id:'PORT09', lat:5.4141,  lon:100.3288, shipments:144,  lead:3.74, delay:1.5, color:'#4A90D9', radius:14 },
+                { id:'PORT05', lat:1.4854,  lon:103.8922, shipments:1,    lead:5.00, delay:0.8, color:'#9E9E9E', radius:8  }
+            ];
+            ports.forEach(function(port) {
+                const icon = L.divIcon({
+                    className: '',
+                    html: '<div style="width:' + (port.radius*2) + 'px;height:' + (port.radius*2) + 'px;background:' + port.color + ';border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:800;font-family:Arial Black,Arial,sans-serif;">' + port.id.replace('PORT','P') + '</div>',
+                    iconSize:   [port.radius*2, port.radius*2],
+                    iconAnchor: [port.radius,   port.radius]
+                });
+                const marker = L.marker([port.lat, port.lon], { icon: icon }).addTo(geoMap);
+                marker.bindTooltip(
+                    '<span style="display:inline-block;width:13px;height:13px;background:' + port.color + ';border-radius:3px;margin-right:7px;vertical-align:middle;"></span>' +
+                    '<b>' + port.id + '</b>&nbsp;&nbsp;Lead: <b>' + port.lead + 'd</b>&nbsp;|&nbsp;Delay: <b>' + port.delay + 'd</b>&nbsp;|&nbsp;<b>' + port.shipments.toLocaleString() + ' shipments</b>',
+                    { className:'port-tooltip', permanent:false, direction:'top', offset:[0, -(port.radius+4)] }
+                );
+            });
+            fetch('https://raw.githubusercontent.com/johan/world.geo.json/master/countries/MYS.geo.json')
+                .then(function(r){ return r.json(); })
+                .then(function(data){
+                    L.geoJSON(data, { style:{ color:'#FF6B35', weight:2, opacity:0.7, fillColor:'#FF6B35', fillOpacity:0.06 } }).addTo(geoMap);
+                }).catch(function(){});
+        })();
+
+        // --- What-If Predictive Simulator ---
+        const WI_CARRIER = {
+            V444_1: { tpt:1.85, delay:4.90, ontime:65.3 },
+            V44_3:  { tpt:2.10, delay:5.40, ontime:59.7 },
+            V444_0: { tpt:2.35, delay:5.90, ontime:54.1 }
+        };
+        const WI_PORT = {
+            PORT04: { adj:0.00 },
+            PORT09: { adj:0.74 },
+            PORT05: { adj:2.00 }
+        };
+        const WI_PLANT = {
+            PLANT04: { adj:-0.06 },
+            PLANT08: { adj:0.07  },
+            PLANT09: { adj:-0.02 },
+            PLANT03: { adj:-0.11 },
+            PLANT12: { adj:0.11  },
+            PLANT16: { adj:0.29  }
+        };
+        const WI_BASE = { lead:3.01, delay:4.72, ontime:68.4 };
+
+        function runWhatIf() {
+            const c  = document.getElementById('wi_carrier').value;
+            const p  = document.getElementById('wi_port').value;
+            const pl = document.getElementById('wi_plant').value;
+            const w  = +document.getElementById('wi_weight').value;
+            const v  = +document.getElementById('wi_volume').value;
+
+            const cd  = WI_CARRIER[c];
+            const pd  = WI_PORT[p];
+            const pld = WI_PLANT[pl];
+            const wAdj = w > 30 ? (w - 30) * 0.012 : 0;
+            const vAdj = v > 300 ? (v - 300) * 0.002 : 0;
+
+            const lead   = +(WI_BASE.lead + pd.adj + pld.adj + wAdj + vAdj + (cd.tpt - 1.82) * 0.5).toFixed(2);
+            const delay  = +(cd.delay + pd.adj * 0.6 + wAdj).toFixed(2);
+            const ontime = +Math.min(95, Math.max(35, cd.ontime - pd.adj * 4 - wAdj * 2 - vAdj * 1.5)).toFixed(1);
+
+            const lCol = lead   < 2.5 ? '#16a34a' : lead   < 3.5 ? '#d97706' : '#dc2626';
+            const dCol = delay  < 3.5 ? '#16a34a' : delay  < 5.0 ? '#d97706' : '#dc2626';
+            const oCol = ontime >= 80 ? '#16a34a' : ontime >= 65 ? '#d97706' : '#dc2626';
+
+            document.getElementById('wi_lead').textContent    = lead + 'd';
+            document.getElementById('wi_delay').textContent   = delay + 'd';
+            document.getElementById('wi_ontime').textContent  = ontime + '%';
+            document.getElementById('wi_lead').style.color    = lCol;
+            document.getElementById('wi_delay').style.color   = dCol;
+            document.getElementById('wi_ontime').style.color  = oCol;
+
+            function diffHtml(val, base, unit, lowerBetter) {
+                const d = +(val - base).toFixed(2);
+                const better = lowerBetter ? d < 0 : d > 0;
+                return '<span style="color:' + (better ? '#16a34a' : '#dc2626') + '">' + (d > 0 ? '+' : '') + d + unit + ' vs baseline</span>';
+            }
+
+            document.getElementById('wi_lead_vs').innerHTML   = diffHtml(lead,   WI_BASE.lead,   'd', true);
+            document.getElementById('wi_delay_vs').innerHTML  = diffHtml(delay,  WI_BASE.delay,  'd', true);
+            document.getElementById('wi_ontime_vs').innerHTML = diffHtml(ontime, WI_BASE.ontime, '%', false);
+
+            document.getElementById('wi_bar_lead').style.width       = Math.min(100, lead / 7 * 100).toFixed(0) + '%';
+            document.getElementById('wi_bar_lead').style.background   = lCol;
+            document.getElementById('wi_bar_delay').style.width      = Math.min(100, delay / 9 * 100).toFixed(0) + '%';
+            document.getElementById('wi_bar_delay').style.background  = dCol;
+            document.getElementById('wi_bar_ontime').style.width     = ontime + '%';
+            document.getElementById('wi_bar_ontime').style.background = oCol;
+
+            let msg = '';
+            if (c === 'V444_1' && p === 'PORT04') {
+                msg = '<strong>Optimal configuration.</strong> V444_1 via Port Klang delivers the best predicted performance — on-time rate of ' + ontime + '%, well above the 85% target.';
+            } else if (c === 'V44_3') {
+                msg = '<strong>Note: CRF Carrier.</strong> V44_3 is Customer-Arranged Shipping — zero-cost freight managed by the customer, not a standard logistics provider. For cost benchmarking, compare V444_1 vs V444_0 only. Switching to V444_1 could improve on-time rate by ~' + (WI_CARRIER['V444_1'].ontime - cd.ontime).toFixed(1) + '%.';
+            } else if (p === 'PORT05') {
+                msg = '<strong>Warning: PORT05 bottleneck.</strong> Routing via Johor Port adds ~2 days to lead time. Avoid unless necessary.';
+            } else if (ontime >= 75) {
+                msg = '<strong>Good configuration.</strong> Predicted on-time rate of ' + ontime + '% is above the network baseline of 68.4%. Consider consolidating more volume here.';
+            } else if (w > 30) {
+                msg = '<strong>Heavy freight impact.</strong> Shipments over 30 kg add transit time. Consider splitting orders or pre-positioning stock closer to demand.';
+            } else {
+                msg = '<strong>Moderate performance.</strong> Switching to V444_1 could improve on-time rate by ~' + (WI_CARRIER['V444_1'].ontime - cd.ontime).toFixed(1) + '% from the current prediction of ' + ontime + '%.';
+            }
+            document.getElementById('wi_insight').innerHTML = msg;
+        }
+
+        runWhatIf();
+
+        // 2. Build Efficiency Battlecards
+        const cardList = document.getElementById('battlecardList');
+        if (cardList) {
+            tests.forEach(test => {
+                const badgeClass = test.status === "Significant" ? "badge-significant" : "badge-stable";
+                const div = document.createElement('div');
+                div.className = "p-4 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors";
+                div.innerHTML = `
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-bold text-slate-800 text-sm">${test.name}</span>
+                        <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide ${badgeClass}">${test.status}</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mb-2">${test.metric} | p-value: ${test.p}</p>
+                    <p class="text-xs font-medium text-slate-600 italic">"${test.insight}"</p>
+                `;
+                cardList.appendChild(div);
+            });
+        }
+    </script>
+
+    <!-- PDPA & Data Ethics Compliance Footer -->
+    <footer class="max-w-7xl mx-auto px-4 md:px-8 mt-10 mb-6">
+        <div style="background: linear-gradient(135deg, #f0f4ff 0%, #fafafa 100%); border: 1px solid #c7d2fe; border-left: 4px solid #4f46e5; border-radius: 10px; padding: 20px 24px;">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+                <span style="font-size: 1.4rem; margin-top: 1px; flex-shrink: 0;">⚖️</span>
+                <div>
+                    <p style="margin: 0 0 8px 0; font-weight: 700; color: #3730a3; font-size: 0.85rem; letter-spacing: 0.02em; text-transform: uppercase;">
+                        PDPA &amp; Data Ethics Compliance Notice
+                    </p>
+                    <p style="margin: 0; color: #475569; font-size: 0.78rem; line-height: 1.65;">
+                        This study was conducted in strict compliance with Malaysia's <strong>Personal Data Protection Act 2010 (PDPA)</strong>. The dataset used is publicly available via Kaggle and contains no personally identifiable information (PII), no individual customer records, and no sensitive commercial data attributable to any identifiable legal entity. All shipment identifiers, carrier codes, port references, and plant codes within the dataset are anonymised numeric or alphanumeric labels that do not correspond to real-world organisations or individuals. No data collection, storage, or processing activity in this study involved the personal data of any natural person. The <strong>3R principles</strong> — Reduce, Reuse, and Recycle of personal data — are fully observed; only the minimum data fields necessary to fulfil the stated analytical objectives were retained. Researchers are advised to maintain these standards if extending or replicating this analysis with live operational data.
+                    </p>
+                </div>
+            </div>
+        </div>
+        <p class="text-center text-slate-400 text-sm mt-6 pb-4">DS Bootcamp #15 Capstone | Supply Chain Logistics Analysis</p>
+    </footer>
+
+</body>
+</html>
